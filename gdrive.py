@@ -127,18 +127,38 @@ def authenticate_blocking() -> Credentials:
 def authenticate_async(
     callback: Callable[[Credentials], None],
     error_cb: Callable[[str], None],
+    timeout: int = 120,
 ) -> threading.Thread:
-    """Run OAuth flow in a background thread."""
+    """Run OAuth flow in a background thread with timeout."""
+    result_holder: list = []
+
     def _worker():
         try:
             creds = authenticate_blocking()
-            callback(creds)
+            result_holder.append(('ok', creds))
         except Exception as exc:
-            error_cb(str(exc))
+            result_holder.append(('err', str(exc)))
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
-    return t
+
+    def _watchdog():
+        t.join(timeout=timeout)
+        if result_holder:
+            kind, val = result_holder[0]
+            if kind == 'ok':
+                callback(val)
+            else:
+                error_cb(val)
+        else:
+            error_cb(
+                f"Logowanie przekroczyło limit czasu ({timeout}s).\n"
+                "Sprawdź czy w Google Cloud Console masz dodany redirect URI: http://localhost"
+            )
+
+    w = threading.Thread(target=_watchdog, daemon=True)
+    w.start()
+    return w
 
 
 def logout() -> None:
