@@ -30,6 +30,13 @@ except Exception:
     DND_FILES = None
     TkinterDnD = None
 
+try:
+    import gdrive
+    GDRIVE_AVAILABLE = True
+except Exception:
+    GDRIVE_AVAILABLE = False
+    gdrive = None  # type: ignore
+
 
 @dataclass
 class ConversationMeta:
@@ -628,8 +635,8 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title(APP_TITLE)
-        self.root.geometry('820x620')
-        self.root.minsize(760, 560)
+        self.root.geometry('820x680')
+        self.root.minsize(760, 600)
 
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar()
@@ -637,8 +644,18 @@ class App:
         self.queue = queue.Queue()
         self.worker_running = False
 
+        # Google Drive state
+        self.drive_creds = None
+        self.drive_service = None
+        self.upload_to_drive_var = tk.BooleanVar(value=False)
+        self._drive_temp_dir = None  # temp dir for Drive downloads
+
         self._build_ui()
         self.root.after(150, self._poll_queue)
+
+        # Try to silently restore Drive session
+        if GDRIVE_AVAILABLE:
+            self._try_restore_drive()
 
     def _build_ui(self):
         outer = ttk.Frame(self.root, padding=16)
@@ -658,13 +675,29 @@ class App:
             foreground='#555555',
             font=('Segoe UI', 9),
         )
-        how_to.pack(anchor='w', pady=(0, 14))
+        how_to.pack(anchor='w', pady=(0, 6))
+
+        # Google Drive connection bar
+        drive_bar = ttk.Frame(outer)
+        drive_bar.pack(fill='x', pady=(0, 10))
+        self._drive_status_label = ttk.Label(drive_bar, text='Google Drive: niedostępne', foreground='#999999', font=('Segoe UI', 9))
+        self._drive_status_label.pack(side='left')
+        self._drive_btn = ttk.Button(drive_bar, text='Zaloguj do Google Drive', command=self._drive_sign_in, width=24)
+        self._drive_btn.pack(side='right')
+        if not GDRIVE_AVAILABLE:
+            self._drive_btn.config(state='disabled')
+            self._drive_status_label.config(text='Google Drive: brak bibliotek (pip install google-api-python-client google-auth-oauthlib)')
+        elif not gdrive.is_configured():
+            self._drive_btn.config(state='disabled')
+            self._drive_status_label.config(text='Google Drive: brak client_config.json (szczegóły w README)')
 
         frm_input = ttk.LabelFrame(outer, text='Źródło')
         frm_input.pack(fill='x', pady=(0, 12))
         ttk.Entry(frm_input, textvariable=self.input_var).pack(side='left', fill='x', expand=True, padx=(10, 6), pady=10)
         ttk.Button(frm_input, text='Wybierz plik', command=self.pick_file).pack(side='left', padx=4, pady=10)
-        ttk.Button(frm_input, text='Wybierz folder', command=self.pick_folder).pack(side='left', padx=(4, 10), pady=10)
+        ttk.Button(frm_input, text='Wybierz folder', command=self.pick_folder).pack(side='left', padx=4, pady=10)
+        self._drive_import_btn = ttk.Button(frm_input, text='Importuj z Drive', command=self._drive_import, state='disabled')
+        self._drive_import_btn.pack(side='left', padx=(4, 10), pady=10)
 
         frm_output = ttk.LabelFrame(outer, text='Folder docelowy')
         frm_output.pack(fill='x', pady=(0, 12))
@@ -690,7 +723,9 @@ class App:
         options = ttk.Frame(outer)
         options.pack(fill='x')
         self.open_after_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(options, text='Otwórz folder wynikowy po zakończeniu', variable=self.open_after_var).pack(anchor='w')
+        ttk.Checkbutton(options, text='Otwórz folder wynikowy po zakończeniu', variable=self.open_after_var).pack(side='left')
+        self._drive_upload_chk = ttk.Checkbutton(options, text='Wyślij wynik na Google Drive', variable=self.upload_to_drive_var, state='disabled')
+        self._drive_upload_chk.pack(side='left', padx=(16, 0))
 
         actions = ttk.Frame(outer)
         actions.pack(fill='x', pady=(12, 8))
@@ -792,6 +827,108 @@ class App:
             except Exception:
                 pass
 
+    # -- Google Drive methods --
+
+    def _try_restore_drive(self):
+        """Try to silently load stored credentials on startup."""
+        def _worker():
+            creds = gdrive.load_credentials()
+            if creds:
+                self.queue.put(('drive_auth_ok', creds))
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _drive_sign_in(self):
+        if self.drive_service:
+            self._drive_sign_out()
+            return
+        self._drive_status_label.config(text='Google Drive: logowanie...', foreground='#CC8800')
+        self._drive_btn.config(state='disabled')
+        gdrive.authenticate_async(
+            callback=lambda creds: self.queue.put(('drive_auth_ok', creds)),
+            error_cb=lambda msg: self.queue.put(('drive_auth_fail', msg)),
+        )
+
+    def _drive_sign_out(self):
+        gdrive.logout()
+        self.drive_creds = None
+        self.drive_service = None
+        self._update_drive_ui(connected=False)
+
+    def _on_drive_authenticated(self, creds):
+        self.drive_creds = creds
+        self.drive_service = gdrive.build_service(creds)
+        email = gdrive.get_user_email(self.drive_service)
+        self._update_drive_ui(connected=True, email=email)
+
+    def _update_drive_ui(self, connected: bool, email: str = ''):
+        if connected:
+            label = f'Google Drive: {email}' if email else 'Google Drive: połączono'
+            self._drive_status_label.config(text=label, foreground='#228B22')
+            self._drive_btn.config(text='Wyloguj z Drive', state='normal')
+            self._drive_import_btn.config(state='normal')
+            self._drive_upload_chk.config(state='normal')
+        else:
+            self._drive_status_label.config(text='Google Drive: niepołączono', foreground='#999999')
+            self._drive_btn.config(text='Zaloguj do Google Drive', state='normal')
+            self._drive_import_btn.config(state='disabled')
+            self._drive_upload_chk.config(state='disabled')
+            self.upload_to_drive_var.set(False)
+
+    def _drive_import(self):
+        if not self.drive_service or self.worker_running:
+            return
+        result = gdrive.pick_file_from_drive(self.root, self.drive_service)
+        if not result:
+            return
+        self.worker_running = True
+        self.convert_btn.config(state='disabled')
+        self.progress.start(10)
+        self.set_status(f'Pobieranie z Google Drive: {result["name"]}...')
+        threading.Thread(
+            target=self._drive_download_worker, args=(result,), daemon=True
+        ).start()
+
+    def _drive_download_worker(self, file_info: dict):
+        try:
+            temp_dir = Path(tempfile.mkdtemp(prefix='gdrive_dl_'))
+            self._drive_temp_dir = temp_dir
+            dest = temp_dir / file_info['name']
+            gdrive.download_file(
+                self.drive_service,
+                file_info['id'],
+                dest,
+                progress_cb=lambda done, total: self.queue.put(('status', f'Pobieranie: {done // 1024} / {total // 1024} KB')),
+            )
+            self.queue.put(('drive_download_done', str(dest)))
+        except Exception as exc:
+            self.queue.put(('error', f'Błąd pobierania z Drive: {exc}'))
+
+    def _drive_upload_result(self, output_dir: str):
+        """Start upload of conversion results to Drive."""
+        if not self.drive_service:
+            return
+        folder_info = gdrive.pick_folder_from_drive(self.root, self.drive_service)
+        parent_id = folder_info['id'] if folder_info else 'root'
+        self.worker_running = True
+        self.convert_btn.config(state='disabled')
+        self.progress.start(10)
+        self.set_status('Wysyłanie wyniku na Google Drive...')
+        threading.Thread(
+            target=self._drive_upload_worker, args=(output_dir, parent_id), daemon=True
+        ).start()
+
+    def _drive_upload_worker(self, output_dir: str, parent_id: str):
+        try:
+            result = gdrive.upload_folder(
+                self.drive_service,
+                Path(output_dir),
+                parent_id,
+                status_cb=lambda txt: self.queue.put(('status', txt)),
+            )
+            self.queue.put(('drive_upload_done', result))
+        except Exception as exc:
+            self.queue.put(('error', f'Błąd uploadu na Drive: {exc}'))
+
     def _poll_queue(self):
         try:
             while True:
@@ -806,18 +943,50 @@ class App:
                     self.set_status(
                         f"Gotowe. Tryb: {payload['mode']}, rozmowy: {payload['conversations']}, wiadomości: {payload['message_count']}, pliki zbiorcze: {payload['bundle_files']}, wynik: {out}"
                     )
+                    # Clean up Drive temp download
+                    if self._drive_temp_dir and Path(self._drive_temp_dir).exists():
+                        shutil.rmtree(self._drive_temp_dir, ignore_errors=True)
+                        self._drive_temp_dir = None
                     if self.open_after_var.get():
                         try:
                             os.startfile(out)  # type: ignore[attr-defined]
                         except Exception:
                             pass
-                    messagebox.showinfo(APP_TITLE, self.status_var.get())
+                    # Auto-trigger Drive upload if checkbox is checked
+                    if self.upload_to_drive_var.get() and self.drive_service:
+                        messagebox.showinfo(APP_TITLE, self.status_var.get())
+                        self._drive_upload_result(out)
+                    else:
+                        messagebox.showinfo(APP_TITLE, self.status_var.get())
                 elif msg_type == 'error':
                     self.worker_running = False
                     self.convert_btn.config(state='normal')
                     self.progress.stop()
                     self.set_status('Wystąpił błąd.')
+                    if self._drive_temp_dir and Path(self._drive_temp_dir).exists():
+                        shutil.rmtree(self._drive_temp_dir, ignore_errors=True)
+                        self._drive_temp_dir = None
                     messagebox.showerror(APP_TITLE, payload[:7000])
+                elif msg_type == 'drive_auth_ok':
+                    self._on_drive_authenticated(payload)
+                elif msg_type == 'drive_auth_fail':
+                    self._update_drive_ui(connected=False)
+                    messagebox.showerror(APP_TITLE, f'Logowanie do Google Drive nie powiodło się:\n{payload[:2000]}')
+                elif msg_type == 'drive_download_done':
+                    # File downloaded from Drive — set as input and start conversion
+                    self.worker_running = False
+                    self.input_var.set(payload)
+                    self.ensure_default_output()
+                    self.set_status(f'Pobrano z Drive: {Path(payload).name}. Rozpoczynam konwersję...')
+                    self.start_conversion()
+                elif msg_type == 'drive_upload_done':
+                    self.worker_running = False
+                    self.convert_btn.config(state='normal')
+                    self.progress.stop()
+                    url = payload.get('url', '')
+                    count = payload.get('uploaded', 0)
+                    self.set_status(f'Wysłano {count} plików na Google Drive: {url}')
+                    messagebox.showinfo(APP_TITLE, f'Wysłano {count} plików na Google Drive.\n\n{url}')
         except queue.Empty:
             pass
         self.root.after(150, self._poll_queue)

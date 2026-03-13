@@ -38,11 +38,25 @@ jobs:
           echo "tag=$ver" >> $env:GITHUB_OUTPUT
           echo "Version: $ver"
 
+      - name: Create client_config.json from secrets
+        shell: pwsh
+        run: |
+          $config = @{
+            installed = @{
+              client_id = "${{ secrets.GOOGLE_CLIENT_ID }}"
+              client_secret = "${{ secrets.GOOGLE_CLIENT_SECRET }}"
+              auth_uri = "https://accounts.google.com/o/oauth2/auth"
+              token_uri = "https://oauth2.googleapis.com/token"
+              redirect_uris = @("http://localhost")
+            }
+          }
+          $config | ConvertTo-Json -Depth 3 | Set-Content -Path "client_config.json" -Encoding UTF8
+
       - name: Build Windows EXE
         shell: pwsh
         run: |
           $ver = "${{ steps.version.outputs.tag }}"
-          pyinstaller --noconfirm --clean --onefile --windowed --name "ChatGPTExportConverter-$ver" app.py
+          pyinstaller --noconfirm --clean --onefile --windowed --collect-data googleapiclient --add-data "client_config.json;." --name "ChatGPTExportConverter-$ver" app.py
 
       - name: Upload EXE to GitHub Release
         uses: softprops/action-gh-release@v2

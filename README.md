@@ -34,6 +34,10 @@ Program generuje:
 - `stats.md` – statystyki zbioru
 - `career_profile_seed.md` – roboczy szkic profilu zawodowego
 
+## Windows SmartScreen
+
+Przy pierwszym uruchomieniu pliku `.exe` Windows może wyświetlić ostrzeżenie SmartScreen („System Windows ochronił ten komputer"). Jest to normalne zachowanie dla aplikacji bez płatnego certyfikatu podpisu cyfrowego. Aby uruchomić program, kliknij **Więcej informacji** → **Uruchom mimo to**. Aplikacja działa w pełni lokalnie i nie wysyła żadnych danych.
+
 ## Uruchamianie lokalne
 
 ### Wymagania
