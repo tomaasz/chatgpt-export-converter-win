@@ -30,15 +30,24 @@ jobs:
           }
           pip install pyinstaller
 
+      - name: Extract version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}"
+          echo "tag=$ver" >> $env:GITHUB_OUTPUT
+          echo "Version: $ver"
+
       - name: Build Windows EXE
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name ChatGPTExportConverter app.py
+          $ver = "${{ steps.version.outputs.tag }}"
+          pyinstaller --noconfirm --clean --onefile --windowed --name "ChatGPTExportConverter-$ver" app.py
 
       - name: Upload EXE to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/ChatGPTExportConverter.exe
+          files: dist/ChatGPTExportConverter-${{ steps.version.outputs.tag }}.exe
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
