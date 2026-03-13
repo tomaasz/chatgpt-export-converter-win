@@ -649,7 +649,16 @@ class App:
             outer,
             text='Obsługuje stary format `conversations.json`, nowy format `conversations-000.json ...`, folder eksportu, ZIP i awaryjnie `chat.html`. Konwersja odbywa się lokalnie.',
             wraplength=780,
-        ).pack(anchor='w', pady=(6, 14))
+        ).pack(anchor='w', pady=(6, 4))
+
+        how_to = ttk.Label(
+            outer,
+            text='Jak pobrać eksport?  chatgpt.com \u2192 Ustawienia \u2192 Eksport danych \u2192 Potwierdź eksport. Link do pobrania ZIP przyjdzie e-mailem.',
+            wraplength=780,
+            foreground='#555555',
+            font=('Segoe UI', 9),
+        )
+        how_to.pack(anchor='w', pady=(0, 14))
 
         frm_input = ttk.LabelFrame(outer, text='Źródło')
         frm_input.pack(fill='x', pady=(0, 12))
