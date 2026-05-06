@@ -59,7 +59,7 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --windowed --collect-data googleapiclient --add-data "client_config.json;." --name "ChatGPTExportConverter-$ver" app.py
 
       - name: Upload EXE to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/ChatGPTExportConverter-${{ steps.version.outputs.tag }}.exe
           generate_release_notes: true
