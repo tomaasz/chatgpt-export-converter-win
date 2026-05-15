@@ -1,0 +1,108 @@
+name: SonarQube Server Analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  sonarqube:
+    name: SonarQube Scan
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Semgrep SARIF
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -v "$PWD:/src" -w /src \
+            semgrep/semgrep semgrep scan \
+              --config=p/security-audit \
+              --config=p/secrets \
+              --config=p/owasp-top-ten \
+              --sarif --output=semgrep.sarif
+
+      - name: Gitleaks SARIF
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD:/repo" -w /repo \
+            ghcr.io/gitleaks/gitleaks:latest \
+            detect --source=. --redact --no-banner \
+            --report-format sarif --report-path gitleaks.sarif
+
+      - name: Generate CycloneDX SBOM (Trivy)
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e TRIVY_CACHE_DIR=/tmp/.trivy \
+            -v "$PWD:/src" -w /src \
+            aquasec/trivy:latest \
+            fs --format cyclonedx --output sbom.cdx.json .
+
+      - name: Upload SBOM to Dependency-Track and export SARIF
+        continue-on-error: true
+        env:
+          DTRACK_URL: ${{ secrets.DEPTRACK_URL }}
+          DTRACK_API_KEY: ${{ secrets.DEPTRACK_API_KEY }}
+          PROJECT_NAME: ${{ github.event.repository.name }}
+          PROJECT_VERSION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -sfS -X POST "$DTRACK_URL/api/v1/bom" \
+            -H "X-Api-Key: $DTRACK_API_KEY" \
+            -F "autoCreate=true" \
+            -F "projectName=$PROJECT_NAME" \
+            -F "projectVersion=$PROJECT_VERSION" \
+            -F "bom=@sbom.cdx.json" | jq -r '.token // empty')
+          [ -n "$TOKEN" ] || { echo "Upload failed"; exit 1; }
+          for i in $(seq 1 60); do
+            sleep 3
+            PROCESSING=$(curl -sfS "$DTRACK_URL/api/v1/bom/token/$TOKEN" \
+              -H "X-Api-Key: $DTRACK_API_KEY" | jq -r .processing)
+            [ "$PROCESSING" = "false" ] && break
+          done
+          sleep 10
+          UUID=$(curl -sfS "$DTRACK_URL/api/v1/project/lookup?name=$PROJECT_NAME&version=$PROJECT_VERSION" \
+            -H "X-Api-Key: $DTRACK_API_KEY" | jq -r .uuid)
+          curl -sfS "$DTRACK_URL/api/v1/finding/project/$UUID" \
+            -H "X-Api-Key: $DTRACK_API_KEY" \
+            -H "Accept: application/sarif+json" \
+            -o dtrack.sarif
+          echo "DT findings: $(jq '.runs[0].results | length' dtrack.sarif)"
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        with:
+          args: >
+            -Dsonar.projectKey=chatgpt-export-converter
+            -Dsonar.python.version=3.12
+            -Dsonar.sarifReportPaths=semgrep.sarif,gitleaks.sarif,dtrack.sarif
+            -Dsonar.qualitygate.wait=true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
