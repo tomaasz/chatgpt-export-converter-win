@@ -14,8 +14,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+    TKINTER_AVAILABLE = True
+except ImportError:
+    from unittest.mock import MagicMock
+    tk = MagicMock()  # type: ignore
+    filedialog = MagicMock()  # type: ignore
+    messagebox = MagicMock()  # type: ignore
+    ttk = MagicMock()  # type: ignore
+    TKINTER_AVAILABLE = False
 
 APP_TITLE = "ChatGPT Export Converter v2"
 BUNDLE_TARGET_CHARS = 2_000_000
@@ -299,10 +309,10 @@ def extract_zip_to_temp(zip_path: Path):
 
 def load_json_file(json_path: Path):
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(json_path, 'r', encoding='utf-8-sig') as f:
             return json.load(f)
     except UnicodeDecodeError:
-        with open(json_path, 'r', encoding='utf-8-sig') as f:
+        with open(json_path, 'r', encoding='utf-8', errors='replace') as f:
             return json.load(f)
 
 
@@ -993,6 +1003,8 @@ class App:
 
 
 def main():
+    if not TKINTER_AVAILABLE:
+        raise RuntimeError("GUI requires tkinter, which is not available in this environment.")
     if DND_AVAILABLE:
         root = TkinterDnD.Tk()
     else:

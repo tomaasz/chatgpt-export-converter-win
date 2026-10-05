@@ -12,14 +12,32 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-from google.auth.transport.requests import Request  # type: ignore
-from google.oauth2.credentials import Credentials  # type: ignore
-from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
-from googleapiclient.discovery import build  # type: ignore
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload  # type: ignore
+try:
+    from google.auth.transport.requests import Request  # type: ignore
+    from google.oauth2.credentials import Credentials  # type: ignore
+    from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
+    from googleapiclient.discovery import build  # type: ignore
+    from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload  # type: ignore
+    GOOGLE_CLIENT_AVAILABLE = True
+except ImportError:
+    from unittest.mock import MagicMock
+    Request = MagicMock  # type: ignore
+    Credentials = MagicMock  # type: ignore
+    InstalledAppFlow = MagicMock  # type: ignore
+    build = MagicMock()  # type: ignore
+    MediaFileUpload = MagicMock  # type: ignore
+    MediaIoBaseDownload = MagicMock  # type: ignore
+    GOOGLE_CLIENT_AVAILABLE = False
 
-import tkinter as tk
-from tkinter import ttk
+try:
+    import tkinter as tk
+    from tkinter import ttk
+    TKINTER_AVAILABLE = True
+except ImportError:
+    from unittest.mock import MagicMock
+    tk = MagicMock()  # type: ignore
+    ttk = MagicMock()  # type: ignore
+    TKINTER_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # OAuth2 configuration
