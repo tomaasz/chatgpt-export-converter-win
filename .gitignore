@@ -13,3 +13,6 @@ output/
 .DS_Store
 Thumbs.db
 client_config.json
+.coverage
+htmlcov/
+.pytest_cache/
