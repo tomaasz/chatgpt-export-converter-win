@@ -3,14 +3,11 @@ name: SonarQube Server Analysis
 on:
   push:
     branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 jobs:
   sonarqube:
     name: SonarQube Scan
-    if: ${{ secrets.SONAR_TOKEN != '' && secrets.SONAR_HOST_URL != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,6 +65,7 @@ jobs:
             fs --format cyclonedx --output sbom.cdx.json .
 
       - name: Upload SBOM to Dependency-Track and export SARIF
+        if: ${{ env.DTRACK_URL != '' && env.DTRACK_API_KEY != '' }}
         continue-on-error: true
         env:
           DTRACK_URL: ${{ secrets.DEPTRACK_URL }}
