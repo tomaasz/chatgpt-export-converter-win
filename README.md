@@ -47,3 +47,47 @@ Przy pierwszym uruchomieniu pliku `.exe` Windows może wyświetlić ostrzeżenie
 ### Instalacja
 ```bash
 pip install -r requirements.txt
+
+<!-- VERIFIED-PROJECT-OVERVIEW:BEGIN -->
+## Opis projektu i technologii
+
+**Cel:** Lokalne przetwarzanie oficjalnych eksportów danych z ChatGPT w aplikacji dla Windows.
+
+**Sprawdzono:** 2026-10-11, na podstawie plików repozytorium z [commitu `398f44ac14`](https://github.com/tomaasz/chatgpt-export-converter-win/commit/398f44ac14d523f7c0033ae4d96dbaeaa4db54e1).
+Opis plików nie potwierdza, że aplikacja jest wdrożona, działa bez błędów ani że wszystkie zadeklarowane narzędzia są używane.
+
+### Technologie i narzędzia
+
+- Główny język według GitHuba: **Python**.
+- Rozpoznane technologie w wybranych manifestach: Python, pytest.
+- Narzędzia zadeklarowane w wybranych plikach: GitHub Actions.
+
+### Wybrane pakiety
+
+| Pakiet | Wymaganie z manifestu | Plik |
+|---|---|---|
+| pytest | >=9.1.1 | requirements-dev.txt |
+| pytest-cov | >=7.1.0 | requirements-dev.txt |
+| tkinterdnd2 | >=0.6.3 | requirements.txt |
+| google-api-python-client | >=2.201.0 | requirements.txt |
+| google-auth-oauthlib | >=1.5.0 | requirements.txt |
+
+To wybrane deklaracje, nie pełna lista i nie wynik pomiaru wersji uruchomionej aplikacji. Pełny wykaz zależności oraz lockfile, jeżeli istnieje, pozostają w repozytorium.
+
+### Skąd pochodzą informacje
+
+- [`README.md`](README.md).
+- [`requirements-dev.txt`](requirements-dev.txt).
+- [`requirements.txt`](requirements.txt).
+- [`.github/workflows/bot-fixer-automerge.yml`](.github/workflows/bot-fixer-automerge.yml).
+- [`.github/workflows/build-release.yml`](.github/workflows/build-release.yml).
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+- [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml).
+- [`.github/workflows/dependabot-automerge.yml`](.github/workflows/dependabot-automerge.yml).
+- [`.github/workflows/sonarqube.yml`](.github/workflows/sonarqube.yml).
+- [`.github/workflows/stale.yml`](.github/workflows/stale.yml).
+
+### Zakres sprawdzenia
+
+Przegląd obejmuje wybrane pliki gałęzi domyślnej. Nie uruchamiano aplikacji ani nie zmieniano wdrożeń. Limity przeglądu mogą pomijać część modułów; brak pozycji w tym opisie nie dowodzi braku funkcji lub narzędzia.
+<!-- VERIFIED-PROJECT-OVERVIEW:END -->
